@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""xycy_hermes_run — launch a XYCY workflow run on the Hermes Agent harness.
+"""xysy_hermes_run — launch a XYSY workflow run on the Hermes Agent harness.
 
 This is the Hermes counterpart of `tRunCli` in local-agent/mcpb/server/index.js.
 Same job, same return shape ({ok, pid, runId, ...} as one line of JSON on stdout),
 so wiring it up is a new branch in the agent's run tool rather than a new runtime.
 
-    xycy_hermes_run.py start  --dir <project> --run-id <id> [--servers a,b] [...]
-    xycy_hermes_run.py status --dir <project> --run-id <id>
-    xycy_hermes_run.py stop   --dir <project> --run-id <id>
+    xysy_hermes_run.py start  --dir <project> --run-id <id> [--servers a,b] [...]
+    xysy_hermes_run.py status --dir <project> --run-id <id>
+    xysy_hermes_run.py stop   --dir <project> --run-id <id>
 
 WHAT MAPS TO WHAT (verified against Hermes v0.20.0)
 
@@ -16,18 +16,18 @@ WHAT MAPS TO WHAT (verified against Hermes v0.20.0)
     --model <m>                             -m <m>
     --permission-mode bypassPermissions     --yolo   (+ --accept-hooks, headless)
     --mcp-config runs/<id>/mcp.json         HERMES_HOME=<per-run home>   <-- see below
-    --output-format stream-json --verbose    the xycy_progress plugin's NDJSON feed
+    --output-format stream-json --verbose    the xysy_progress plugin's NDJSON feed
     (no equivalent)                         -t <toolsets>, --worktree, --usage-file
 
 WHY A PER-RUN HERMES_HOME
     Hermes has no per-invocation MCP config flag; servers come from
     $HERMES_HOME/config.yaml. Pointing HERMES_HOME at a directory this script
     generates buys three things at once:
-      1. the per-variant env isolation XYCY needs (OS_MCP_APP, RHINO_MCP_PORT …),
+      1. the per-variant env isolation XYSY needs (OS_MCP_APP, RHINO_MCP_PORT …),
       2. an allowlist — only the servers THIS run needs get started, so a run
          never fires up `autodesk` (npx mcp-remote → an OAuth browser window) or
          six uvx app servers it has no use for,
-      3. a private plugins/ dir, so the instrumentation is scoped to XYCY runs
+      3. a private plugins/ dir, so the instrumentation is scoped to XYSY runs
          and cannot alter the user's own `hermes` sessions.
 
 Python 3.9+, standard library only. Runs on the user's machine next to the
@@ -122,7 +122,7 @@ def say_something(err, where):
         if n > 3:
             return
         tail = " (further reports from this line are dropped)" if n == 3 else ""
-        _xy_sys.stderr.write("[xycy] " + str(where) + ": " + type(err).__name__
+        _xy_sys.stderr.write("[xysy] " + str(where) + ": " + type(err).__name__
                              + ": " + str(err) + tail + "\n")
         _xy_sys.stderr.flush()
     except Exception:
@@ -131,16 +131,16 @@ def say_something(err, where):
 
 
 HOME = os.path.expanduser("~")
-XYCY_ROOT = os.environ.get("XYCY_ROOT") or os.path.join(HOME, ".xycy")
-REGISTRY = os.path.join(XYCY_ROOT, "registry.json")
-RUN_HOMES = os.path.join(XYCY_ROOT, "hermes-runs")
-PLUGIN_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xycy_progress")
+XYSY_ROOT = os.environ.get("XYSY_ROOT") or os.path.join(HOME, ".xysy")
+REGISTRY = os.path.join(XYSY_ROOT, "registry.json")
+RUN_HOMES = os.path.join(XYSY_ROOT, "hermes-runs")
+PLUGIN_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xysy_progress")
 
 # The Bridge's own MCP server is never handed to a run: the run is what the
 # agent launched, and re-entering it invites a loop.
-SELF_SERVERS = {"xycy-agent", "openstudio-agent", "xycy", "openstudio"}
+SELF_SERVERS = {"xysy-agent", "openstudio-agent", "xysy", "openstudio"}
 
-# Hermes refuses to start on a model reporting under 64k context, and a XYCY run
+# Hermes refuses to start on a model reporting under 64k context, and a XYSY run
 # carries plan.json + a brief + skills before it does any work, so the ceiling
 # matters more here than in chat. Overridable per run.
 MIN_CONTEXT = 65536
@@ -168,7 +168,7 @@ def hermes_home():
 
     Hermes' own installer sets HERMES_HOME, so that wins whenever it is set. When it
     is not set the default is not the same on every operating system, and assuming
-    ~/.hermes everywhere is how XYCY came to look in an empty folder: measured on
+    ~/.hermes everywhere is how XYSY came to look in an empty folder: measured on
     8 September 2026, a Hermes Desktop install on Windows put its home in
     %LOCALAPPDATA%\\hermes and left ~/.hermes holding nothing at all.
     """
@@ -185,7 +185,7 @@ def find_hermes():
     """GUI-launched parents inherit a stripped PATH — look where the installer puts it.
 
     Windows needs its own list AND the .exe/.cmd suffixes: a bare 'hermes' matches nothing there,
-    so XYCY would report Hermes missing on a machine that has it — and, because the agent IS
+    so XYSY would report Hermes missing on a machine that has it — and, because the agent IS
     reachable on Windows, it would say so with confidence rather than admitting it cannot tell.
     """
     if os.name == "nt":
@@ -234,7 +234,7 @@ def enriched_env():
 
 
 def select_servers(names, mcp_env):
-    """Pick this run's servers out of the XYCY registry and apply env overrides.
+    """Pick this run's servers out of the XYSY registry and apply env overrides.
 
     `names is None` means "not specified" → every app server in the registry.
     An empty LIST means "this run needs no app servers" and must stay empty:
@@ -253,7 +253,7 @@ def select_servers(names, mcp_env):
             missing.append(name)
             continue
         # transport:'builtin' servers have no launch command — the same class of
-        # bug that leaked ~/.xycy paths into exported packages. Skip, don't guess.
+        # bug that leaked ~/.xysy paths into exported packages. Skip, don't guess.
         if not entry.get("command"):
             continue
         server = {"command": entry["command"], "args": list(entry.get("args") or [])}
@@ -272,7 +272,7 @@ def select_servers(names, mcp_env):
 # outputs/DiyaraTower_CityRender.png over each other and the LOSER's write is the one that
 # survived - a blocked eye-level view, 1280x720, written at the moment its own verdict said
 # `done`. Every check we own passed it: right name, right folder, non-zero, plausible
-# dimensions. Nothing in XYCY prevented it, noticed it, or wrote it down.
+# dimensions. Nothing in XYSY prevented it, noticed it, or wrote it down.
 #
 # THE RULE: a deliverable is only attributable if exactly ONE run could have written it.
 # Last-write-wins across concurrent runs defeats XY-DONEEMPTY, XY-OUTWROTE, XY-BLANKPAGE and
@@ -308,7 +308,7 @@ def _live_holder(server, run_id=None):
         try:
             os.remove(path)              # a dead run holds nothing
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:311')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:311')
         return None
     return data
 
@@ -329,7 +329,7 @@ def claim_apps(servers, run_id, pid=None):
                 json.dump({"runId": run_id, "pid": int(pid or os.getpid()),
                            "startedAt": round(time.time(), 3)}, handle, indent=2)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:332')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:332')
     return []
 
 
@@ -342,7 +342,7 @@ def release_apps(servers, run_id):
             try:
                 os.remove(path)
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:345')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:345')
 
 
 # XY-APPDOC. "Is the application there?" is not the question. 26 Aug, run_full0826__n1:
@@ -365,7 +365,7 @@ DOC_PROBES = {
               lambda t: "no document" in t.lower()),
     "freecad": ("list_documents", {},
                 lambda t: False),   # an empty FreeCAD is legitimate: the payload makes the doc
-    "blender": ("get_scene_info", {"user_prompt": "xycy document check"},
+    "blender": ("get_scene_info", {"user_prompt": "xysy document check"},
                 lambda t: False),   # Blender always has a scene
 }
 DOC_PROBE_TIMEOUT = 20.0
@@ -414,7 +414,7 @@ def _mcp_ask(server, tool, args, timeout=DOC_PROBE_TIMEOUT):
     try:
         send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
               "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                         "clientInfo": {"name": "xycy-appdoc", "version": "1"}}})
+                         "clientInfo": {"name": "xysy-appdoc", "version": "1"}}})
         if read_for(1) is None:
             error = "no initialize response"
         else:
@@ -435,7 +435,7 @@ def _mcp_ask(server, tool, args, timeout=DOC_PROBE_TIMEOUT):
         try:
             proc.kill()
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:438')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:438')
     return text, error
 
 
@@ -443,7 +443,7 @@ def _mcp_ask(server, tool, args, timeout=DOC_PROBE_TIMEOUT):
 # whether it holds THE RIGHT ONE, and on 27 Aug that difference cost a run: SketchUp was holding
 # an empty untitled model where DiyaraTower_CityBlock.skp - the step's own declared City Context
 # input, 15,487 entities - should have been. The step would have built a tower into an empty
-# void, photographed the void, and reported success. Nothing anywhere in XYCY would have
+# void, photographed the void, and reported success. Nothing anywhere in XYSY would have
 # noticed; a person looking at the render would have.
 #
 # A declared input that is an application's OWN document type is a precondition, not a hint. So:
@@ -490,13 +490,13 @@ def _open_document_names(name, spec):
         for key in ("path", "title", "name", "FileName", "Label"):
             _take(data.get(key))
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:493')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:493')
     # FreeCAD's list_documents is a bare JSON array of document names
     try:
         arr = json.loads(text[text.index("["):text.rindex("]") + 1])
         _take(arr)
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:499')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:499')
     # and anything that simply looks like a document filename, wherever it appears
     for m in re.findall(r'[\w\-. ()]+\.(?:skp|3dm|blend|FCStd|fcstd)', text):
         _take(m)
@@ -589,7 +589,7 @@ APP_RUN_DISABLED_TOOLSETS = ("terminal", "code_execution", "browser", "web",
                              # turn: 17.6s of n4 and 43s of n3, measured.
                              "todo",
                              # XY-VISIONOFF, 27 Aug. `vision_analyze` DOES NOT RETURN in a
-                             # XYCY run. Three attempts on 27 Aug with the auxiliary client
+                             # XYSY run. Three attempts on 27 Aug with the auxiliary client
                              # correctly pointed at this machine's own ollama: the log shows
                              # the vision completion coming back 200 in 42 s and the tool
                              # never handing an answer to the agent. XY-HZSTALL cannot see it
@@ -627,7 +627,7 @@ DOC_RUN_DISABLED_TOOLSETS = ("browser", "web", "computer_use", "todo", "vision")
 # XY-VISIONLOCAL - seconds a single vision_analyze call may take against the local model.
 # 85 s measured for a 1024 px sketch on this Mac; the ceiling is for a bigger image on a
 # slower machine, not for a hang. A hang is what this whole block exists to stop.
-VISION_TIMEOUT = int(os.environ.get("XYCY_VISION_TIMEOUT", "300") or 300)
+VISION_TIMEOUT = int(os.environ.get("XYSY_VISION_TIMEOUT", "300") or 300)
 
 # Above this many tools on one server, keep Hermes' deferral bridge - see XY-EAGERTOOLS.
 EAGER_TOOLS_MAX_PER_SERVER = 8
@@ -677,18 +677,18 @@ SERVER_PROMPT_TOOLS = ["list_prompts", "get_prompt", "list_resources", "read_res
 # geometry and invents the building. That is still true and the default stays deny.
 #
 # But it collided with the payload method on 27 Aug and cost a run. run_v6__n4's prompt printed a
-# complete, XYCY-generated RhinoScript and told the model to paste it into
+# complete, XYSY-generated RhinoScript and told the model to paste it into
 # `execute_rhinoscript_python_code` - a tool XY-NOCODEGEN had already removed from the array. The
 # model could not find it, and spent its first three turns and about 60 seconds pulling
 # `list_prompts`, `list_resources` and `get_prompt` off the server instead, hunting for a way in.
 #
 # The distinction the tool name cannot carry: the hatch is about WHO AUTHORED THE CODE. A script
-# the model composes is the thing to refuse; a script XYCY computed and printed in the prompt is
+# the model composes is the thing to refuse; a script XYSY computed and printed in the prompt is
 # the payload method working exactly as intended. So the caller says so, once, per run, in the
 # open - `--allow-code rhino` - and it is written into the run record and the log. A rule with no
 # way to say "I meant it" gets deleted by whoever hits it next at 2am; a rule with a loud,
 # recorded exception survives.
-CODE_ALLOWED_ENV = "XYCY_ALLOW_CODE"
+CODE_ALLOWED_ENV = "XYSY_ALLOW_CODE"
 
 
 def tools_named_in(prompt, servers):
@@ -736,7 +736,7 @@ def _skill_declared_name(skill_dir):
                 if line.lower().startswith("name:"):
                     return line.split(":", 1)[1].strip()
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:739')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:739')
     return ""
 
 
@@ -813,15 +813,15 @@ def endpoint_is_local(base_url):
 def _ensure_doc_libs_quietly():
     """XY-DOCLIBS2. Make sure the document libraries are importable, and never raise.
 
-    The work itself lives in xycy_setup.ensure_doc_libs, beside which_hermes, because that file
+    The work itself lives in xysy_setup.ensure_doc_libs, beside which_hermes, because that file
     already knows where Hermes is on each platform and one question must have one answer. It is
     imported HERE rather than at module scope so a runner sitting next to an older copy of
-    xycy_setup still starts runs - it just does not get this.
+    xysy_setup still starts runs - it just does not get this.
     """
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import xycy_setup            # noqa: E402  - deliberately late, see above
-        return xycy_setup.ensure_doc_libs()
+        import xysy_setup            # noqa: E402  - deliberately late, see above
+        return xysy_setup.ensure_doc_libs()
     except Exception as exc:
         return {"ok": False, "why": "the document-library check could not run: %s" % exc}
 
@@ -909,7 +909,7 @@ def build_home(run_id, servers, model, provider, base_url, context_length,
         # A run drives real applications; it must not stop at the chat default.
         "code_execution": {"max_tool_calls": int(max_tool_calls), "timeout": 900},
         "delegation": {"max_iterations": 200},
-        "plugins": {"enabled": ["xycy_progress"]},
+        "plugins": {"enabled": ["xysy_progress"]},
         "hooks_auto_accept": True,
         "mcp_servers": servers,
     }
@@ -998,7 +998,7 @@ def build_home(run_id, servers, model, provider, base_url, context_length,
     # tries to write, never by reading the config back.
     # Quoted because both paths hold spaces on Windows; Hermes splits with its own
     # split_command_line, which keeps backslashes (shlex would eat them).
-    _guard = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xycy_writeguard.py")
+    _guard = os.path.join(os.path.dirname(os.path.abspath(__file__)), "xysy_writeguard.py")
     if os.path.isfile(_guard):
         config["hooks"] = {"pre_tool_call": [
             {"command": '"%s" "%s"' % (sys.executable, _guard),
@@ -1048,16 +1048,16 @@ def build_home(run_id, servers, model, provider, base_url, context_length,
     env_path = os.path.join(home, ".env")
     if not os.path.exists(env_path):
         if endpoint_is_local(base_url):
-            _api_key = os.environ.get("XYCY_LOCAL_API_KEY") or "local"
+            _api_key = os.environ.get("XYSY_LOCAL_API_KEY") or "local"
         else:
             _api_key = os.environ.get("OPENAI_API_KEY") or ""
         with open(env_path, "w", encoding="utf-8") as handle:
             handle.write("OPENAI_API_KEY=%s\n" % _api_key)
         os.chmod(env_path, 0o600)
 
-    # Instrumentation. Copied, not symlinked: a symlink into the XYCY install
+    # Instrumentation. Copied, not symlinked: a symlink into the XYSY install
     # would break the moment the app is moved or updated mid-run.
-    plugin_dst = os.path.join(home, "plugins", "xycy_progress")
+    plugin_dst = os.path.join(home, "plugins", "xysy_progress")
     if os.path.isdir(PLUGIN_SRC):
         shutil.rmtree(plugin_dst, ignore_errors=True)
         shutil.copytree(PLUGIN_SRC, plugin_dst)
@@ -1127,7 +1127,7 @@ def build_home(run_id, servers, model, provider, base_url, context_length,
             else:
                 shutil.rmtree(victim, ignore_errors=True)
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:1130')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:1130')
 
     bridged = []
     for name in chosen:
@@ -1284,10 +1284,10 @@ def ollama_native_context(base_url, model):
 # MIN_CONTEXT is a FLOOR: it is the smallest window Hermes will start on. It was also being
 # used as the DEFAULT, which is a different thing entirely, and the difference was costing
 # three quarters of the model. MEASURED on Sean's PC, 20 Sep 2026: Ollama had qwen3.6:35b
-# loaded with context_length 262144, the whole 29 GB in VRAM, and every XYCY run on Hermes
+# loaded with context_length 262144, the whole 29 GB in VRAM, and every XYSY run on Hermes
 # asked it for 65,536 - because MIN_CONTEXT was the last term in the `or` chain and because
 # picking a model on the Hermes card wrote model.ollama_num_ctx = 65536 into the person's own
-# config for ever. A XYCY run carries plan.json, a brief and its skills before it does any
+# config for ever. A XYSY run carries plan.json, a brief and its skills before it does any
 # work, so the window is not a nicety.
 #
 # So: what the caller asked for, then what the person's config says, then THE MODEL'S OWN
@@ -1468,7 +1468,7 @@ def cmd_models(args):
 
 
 def cmd_probe(args):
-    """Answer 'is Hermes ready to run a XYCY workflow' by actually making it reason.
+    """Answer 'is Hermes ready to run a XYSY workflow' by actually making it reason.
 
     Reports the DISTINCT failure, because each one has a different fix:
       not_installed | no_runner | not_configured | context_too_small | endpoint_down | no_reason
@@ -1530,7 +1530,7 @@ def cmd_probe(args):
     build_home("_probe", {}, model, provider, base_url, context_length,
                DEFAULT_MAX_TOOL_CALLS, HOME)
     env["HERMES_HOME"] = home
-    env.pop("XYCY_RUN_DIR", None)         # keep probes out of the run event feed
+    env.pop("XYSY_RUN_DIR", None)         # keep probes out of the run event feed
 
     started = time.monotonic()
     try:
@@ -1586,8 +1586,8 @@ def cmd_probe(args):
 
 # ===== XY-HERMES-THINK - short reasoning, locally, with no tools =============================
 # The sparkle features (ranking, classification, drafting a brief, proposing a step list) are
-# short prompts over material XYCY already holds. Those a small local model can do. Anything
-# needing the live web or big-model judgement is NOT routed here - index.js sends it to XYCY's
+# short prompts over material XYSY already holds. Those a small local model can do. Anything
+# needing the live web or big-model judgement is NOT routed here - index.js sends it to XYSY's
 # own Anthropic API instead, which is the one thing Sean's no-Claude-CLI rule still allows.
 
 # Hermes' CONFIGURABLE_TOOLSETS, verbatim. Everything here is switched off for a think, minus
@@ -1636,7 +1636,7 @@ def think_home(mode, model, provider, base_url, context_length):
     env_path = os.path.join(home, ".env")
     if not os.path.exists(env_path):
         with open(env_path, "w", encoding="utf-8") as handle:
-            handle.write("OPENAI_API_KEY=%s\n" % (os.environ.get("XYCY_LOCAL_API_KEY") or "local"))
+            handle.write("OPENAI_API_KEY=%s\n" % (os.environ.get("XYSY_LOCAL_API_KEY") or "local"))
         os.chmod(env_path, 0o600)
     return home
 
@@ -1697,7 +1697,7 @@ def cmd_think(args):
     home = think_home(mode, model, provider, base_url, context_length)
     env = enriched_env()
     env["HERMES_HOME"] = home
-    env.pop("XYCY_RUN_DIR", None)          # a think is not a run; keep it out of the event feed
+    env.pop("XYSY_RUN_DIR", None)          # a think is not a run; keep it out of the event feed
 
     argv = [hermes, "-z", text_in, "--yolo", "--accept-hooks"]
     if args.web:
@@ -1787,7 +1787,7 @@ def rhino_documents(port=None, timeout=6.0):
         try:
             sock.close()
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:1790')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:1790')
     try:
         out = (reply.get("result") or {}).get("output") or ""
         line = [l for l in out.splitlines() if l.strip().startswith("[")]
@@ -1808,7 +1808,7 @@ def rhino_documents(port=None, timeout=6.0):
 
 # A healthy Rhino sits around 30-55 threads. Past this it is measurably eating the machine
 # and every turn slows down, which reads from the outside as a slow model.
-RHINO_THREAD_ALARM = int(os.environ.get("XYCY_RHINO_THREAD_ALARM", "600") or 600)
+RHINO_THREAD_ALARM = int(os.environ.get("XYSY_RHINO_THREAD_ALARM", "600") or 600)
 
 
 def rhino_threads():
@@ -1885,7 +1885,7 @@ def cmd_start(args):
         # Same default contract as the Claude path: RUN.md is the instruction set.
         # XY-HZPATH - this said "runs/<id>/RUN.md ... you are already in its project
         # folder". Both halves fail a local model. Hermes presents its OWN per-run profile
-        # home as the workspace, so a RELATIVE path resolves against ~/.xycy/hermes-runs/<id>
+        # home as the workspace, so a RELATIVE path resolves against ~/.xysy/hermes-runs/<id>
         # and finds nothing - and the parenthetical then tells the model to trust exactly the
         # root that is wrong. Measured 25 Aug on Diyara Tower: qwen3.6:35b-64k burned 61.8 min
         # over 5 sessions, nemotron-lightning-64k 10.6 min over 2 - both hunting RUN.md in the
@@ -1895,7 +1895,7 @@ def cmd_start(args):
         # So: absolute paths, name every folder, and say plainly that nobody is there to ask.
         _run_dir = os.path.join(project_dir, "runs", args.run_id)
         prompt = (
-            "Execute the XYCY workflow run described in " + _run_dir + "/RUN.md\n"
+            "Execute the XYSY workflow run described in " + _run_dir + "/RUN.md\n"
             "READ THAT FILE FIRST, at that exact absolute path. It is the instruction set.\n"
             "\n"
             "Absolute paths for this run - use these, do not guess and do not search for them:\n"
@@ -1934,7 +1934,7 @@ def cmd_start(args):
         provider = "custom"
     if not endpoint_is_local(base_url) and not os.environ.get("OPENAI_API_KEY"):
         die("this run is pointed at %s, which is not this machine, and no cloud API key "
-            "is set. Add one in the XYCY Bridge settings (Cloud inference API key); "
+            "is set. Add one in the XYSY Bridge settings (Cloud inference API key); "
             "without it every call comes back 401 and a vision call hangs instead of "
             "failing." % base_url, state="cloud_key_missing", baseUrl=base_url)
     # ollama_num_ctx FIRST: context_length is what Hermes believes the window is, while
@@ -1975,7 +1975,7 @@ def cmd_start(args):
         release_apps(servers, args.run_id)      # XY-ONEDRIVER - never hold what we will not run
         name, tool, said = doc_refusals[0]
         die("%s has no open document - %s answered %r. A step cannot drive an application "
-            "that is not holding anything: open a document (or let XYCY open one) and run it "
+            "that is not holding anything: open a document (or let XYSY open one) and run it "
             "again." % (name, tool, said),
             state="app_has_no_document", server=name, probe=tool, answer=said,
             probes=doc_asked)
@@ -1993,10 +1993,10 @@ def cmd_start(args):
     want = None
     if args.skills:
         want = [s.strip() for s in args.skills.split(",") if s.strip()]
-    # XYCY_TOOL_FILTER=off puts the run back on Hermes' own deferral bridge with the whole
+    # XYSY_TOOL_FILTER=off puts the run back on Hermes' own deferral bridge with the whole
     # server surface - the A/B switch the measurements were taken with, and the escape hatch
     # if a step ever needs a tool its prompt does not name.
-    named_tools = ({} if os.environ.get("XYCY_TOOL_FILTER", "").lower() == "off"
+    named_tools = ({} if os.environ.get("XYSY_TOOL_FILTER", "").lower() == "off"
                    else tools_named_in(prompt, servers))
     # XY-CODEBYPAYLOAD - only servers the caller named, and only ones this run actually declares.
     allow_code = [s.strip() for s in (args.allow_code or "").split(",") if s.strip()]
@@ -2008,13 +2008,13 @@ def cmd_start(args):
     if allow_code:
         try:
             with open(os.path.join(run_dir, "hermes.log"), "a", encoding="utf-8") as _h:
-                _h.write("[xycy] XY-CODEBYPAYLOAD - code execution is ALLOWED on %s for this "
+                _h.write("[xysy] XY-CODEBYPAYLOAD - code execution is ALLOWED on %s for this "
                          "run. XY-NOCODEGEN normally removes those tools; the caller asked for "
                          "them because the script is in the prompt, not in the model's head. "
                          "If this run's geometry is wrong, check the prompt carried a script "
                          "before you blame the model.\n" % ", ".join(allow_code))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2017')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2017')
 
     # XY-PROMPTBYFILE, one level down. The Bridge now hands this runner its step's words in a
     # file rather than on a command line, because Windows caps a command line at 32,767
@@ -2041,7 +2041,7 @@ def cmd_start(args):
                 with open(_brief, "w", encoding="utf-8") as _bh:
                     _bh.write(prompt)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:promptbyfile')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:promptbyfile')
         prompt_arg = (
             "Your instructions for this step are too long to pass on a command line, so they "
             "are in this file:\n\n    " + _brief + "\n\nRead that WHOLE file first, with "
@@ -2052,12 +2052,12 @@ def cmd_start(args):
         )
         try:
             with open(os.path.join(run_dir, "hermes.log"), "a", encoding="utf-8") as _h:
-                _h.write("[xycy] XY-PROMPTBYFILE - this step's brief is %d characters, over the "
+                _h.write("[xysy] XY-PROMPTBYFILE - this step's brief is %d characters, over the "
                          "%d this platform allows on a command line, so Hermes was pointed at "
                          "%s instead. The whole brief is in that file.\n"
                          % (len(prompt), _limit, _brief))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:promptbyfilelog')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:promptbyfilelog')
 
     argv = [hermes, "-z", prompt_arg, "--in", project_dir, "--yolo", "--accept-hooks",
             "--usage-file", os.path.join(run_dir, "usage.json")]
@@ -2081,12 +2081,12 @@ def cmd_start(args):
     if skills_info.get("source") == "unfiltered":
         try:
             with open(os.path.join(run_dir, "hermes.log"), "a", encoding="utf-8") as _h:
-                _h.write("[xycy] XY-SKILLLOUD - this run's plan could not be read, so the "
+                _h.write("[xysy] XY-SKILLLOUD - this run's plan could not be read, so the "
                          "skills filter failed OPEN and every staged skill is bridged (%d). "
                          "A run id must be <parentRunId>__<node> for the plan lookup to "
                          "work.\n" % len(bridged))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2089')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2089')
     if skills_info.get("source") == "unfiltered":
         skills = args.skills or ",".join(bridged)
     else:
@@ -2098,15 +2098,15 @@ def cmd_start(args):
 
     env = enriched_env()
     env["HERMES_HOME"] = home
-    env["XYCY_RUN_DIR"] = run_dir          # arms the instrumentation plugin
-    env["XYCY_RUN_ID"] = args.run_id
+    env["XYSY_RUN_DIR"] = run_dir          # arms the instrumentation plugin
+    env["XYSY_RUN_ID"] = args.run_id
     # XY-WRITEGUARD - and arms the write guard, which reads these three and stands aside
     # without them. outputs/ is the project's, shared between steps by contract; the run
     # folder is this run's own. A step writes into one of those two and nowhere else, and
     # writes a program file only when the plan declares a script step.
-    env["XYCY_OUTPUTS_DIR"] = os.path.join(project_dir, "outputs")
-    env["XYCY_SCRIPT_STEP"] = "1" if _plan_declares_script(run_dir, project_dir, args.run_id) else "0"
-    env["XYCY_DOC_STEP"] = "0" if servers else "1"   # XY-GUARDSAYSPY2 - no application: execute_code is the way
+    env["XYSY_OUTPUTS_DIR"] = os.path.join(project_dir, "outputs")
+    env["XYSY_SCRIPT_STEP"] = "1" if _plan_declares_script(run_dir, project_dir, args.run_id) else "0"
+    env["XYSY_DOC_STEP"] = "0" if servers else "1"   # XY-GUARDSAYSPY2 - no application: execute_code is the way
     # XY-DOCLIBS2 - a step with no application has to AUTHOR its artifact, and on this product
     # that means Python: the xlsx, docx and pdf skills are Python and there is no other way to
     # make a real workbook or a real PDF. XY-DOCSTEPPY gives such a step code_execution back;
@@ -2144,7 +2144,7 @@ def cmd_start(args):
     # something to say. A plain default is the whole fix - the block below still runs.
     env_notice = None
     if env_notice:
-        env["XYCY_NOTICE"] = env_notice        # XY-RHINOLEAK: surfaced by the plugin
+        env["XYSY_NOTICE"] = env_notice        # XY-RHINOLEAK: surfaced by the plugin
     shot = getattr(args, "shot", None)
     if not shot:
         # Derive it: a per-step sub-run is "<parentRunId>__n<node>" (with "r2" on a retry),
@@ -2160,8 +2160,8 @@ def cmd_start(args):
         try:
             os.makedirs(os.path.dirname(shot), exist_ok=True)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2163')
-        env["XYCY_SHOT_PATH"] = shot
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2163')
+        env["XYSY_SHOT_PATH"] = shot
     if model:
         env["HERMES_INFERENCE_MODEL"] = model
 
@@ -2177,7 +2177,7 @@ def cmd_start(args):
                           encoding="utf-8") as _h:
                     json.dump(_leak, _h, indent=2)
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2180')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2180')
             _note = rhino_leak_notice(_leak)
             if _note:
                 env_notice = _note
@@ -2200,7 +2200,7 @@ def cmd_start(args):
                           encoding="utf-8") as _h:
                     json.dump({"at": time.time(), "documents": _docs}, _h, indent=2)
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2203')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2203')
             prompt = rhino_state_brief(_docs) + (prompt or "")
 
     log_path = os.path.join(run_dir, "hermes.log")
@@ -2209,7 +2209,7 @@ def cmd_start(args):
     except Exception as exc:
         die("couldn't open log: %s" % exc)
 
-    # Detached so the caller returns immediately; XYCY polls the run dir.
+    # Detached so the caller returns immediately; XYSY polls the run dir.
     popen_kwargs = {"cwd": project_dir, "env": env, "stdin": subprocess.DEVNULL,
                     "stdout": log, "stderr": subprocess.STDOUT}
     # XY-HZFINISH: spawn the supervisor rather than Hermes itself. It owns the process group
@@ -2221,7 +2221,7 @@ def cmd_start(args):
                        "refused": [n for n, _, _ in doc_refusals],
                        "inputsChecked": in_asked}, handle, indent=2)
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2224')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2224')
 
     spec_path = os.path.join(run_dir, "hermes-supervise.json")
     try:
@@ -2248,7 +2248,7 @@ def cmd_start(args):
         sup_kwargs["stdout"] = sup_log
         sup_kwargs["stderr"] = subprocess.STDOUT
         # XY-HZWORKER - the run id goes on the SUPERVISOR'S COMMAND LINE, where the agent can
-        # see it. It is passed by environment (XYCY_HZ_SUPERVISE names the spec file) and that
+        # see it. It is passed by environment (XYSY_HZ_SUPERVISE names the spec file) and that
         # is how main() finds it, so this argument is never parsed and never read here. It is
         # there to be READ FROM OUTSIDE, by the one function that decides whether a run still
         # has a worker: pidIsRun() in the agent asks whether the run id appears in a process's
@@ -2341,9 +2341,9 @@ def cmd_status(args):
                 try:
                     events.append(json.loads(line))
                 except Exception as _xy_e:
-                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2344')
+                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2344')
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2346')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2346')
     # XY-HEARTBEAT · "is there a process" is not "is the work still going".
     # Watched from a web page, a run that had ENDED at 26s still read alive=true at 60s,
     # because the child lingers after the session closes. Liveness is now the conjunction,
@@ -2434,7 +2434,7 @@ def cmd_stop(args):
         return
     # Kill the whole TREE, not just the parent: Hermes launches the app MCP servers as its own
     # children, and killing only the parent leaves uvx/npx servers holding their ports — the next
-    # run then fails to bind and looks like a XYCY bug.
+    # run then fails to bind and looks like a XYSY bug.
     # os.killpg does not exist on Windows, so this used to raise AttributeError and the Stop
     # button did nothing at all there. Each platform gets the call it actually has.
     if os.name == "nt":
@@ -2449,7 +2449,7 @@ def cmd_stop(args):
             try:
                 os.kill(pid, signal.SIGTERM)
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2452')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2452')
     for _ in range(20):
         if not alive(pid):
             break
@@ -2458,7 +2458,7 @@ def cmd_stop(args):
         try:
             os.killpg(os.getpgid(pid), signal.SIGKILL)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2461')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2461')
     # XY-HZSTOPSAYS (26 Sep 2026) - the run's own status file says it was stopped. The stop kills the
     # supervisor and Hermes with /F, so neither can write its last word, and hermes-status.json kept
     # whatever the plugin wrote last. MEASURED on Sean's PC, the wind step on Hermes, stopped at 71
@@ -2475,7 +2475,7 @@ def cmd_stop(args):
                     json.dump(_st, _h)
                 os.replace(_tmp, _sp)
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:hzstopsays')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:hzstopsays')
     print(json.dumps({"ok": True, "stopped": True, "pid": pid}))
 
 
@@ -2565,7 +2565,7 @@ def spawn_outliving(argv, kwargs):
     raise last
 
 
-SUPERVISE_ENV = "XYCY_HZ_SUPERVISE"
+SUPERVISE_ENV = "XYSY_HZ_SUPERVISE"
 SUPERVISE_MAX = 4
 
 RESUME_PROMPT = (
@@ -2598,17 +2598,17 @@ RESUME_PROMPT = (
 # step had already built 30 objects in Blender, then waited 82 minutes on a single
 # api call against a declared 14-minute budget.
 #
-# waitingOn/waitingSec are written by the xycy_progress plugin on every event, so
+# waitingOn/waitingSec are written by the xysy_progress plugin on every event, so
 # "waiting on the model for longer than any real answer takes" is a signal we
 # already have. Killing the child hands the run to the retry loop, which resumes
 # from progress.json - nothing built is lost, because it lives in the application.
-STALL_ENV = "XYCY_HZ_STALL_SEC"
+STALL_ENV = "XYSY_HZ_STALL_SEC"
 STALL_DEFAULT = 900
 # XY-HZSTALL2 - a TOOL that never returns hangs the run exactly as a model that never answers
 # does, and the original watchdog watched only the model. Measured 26 Aug on run_qwen_n4: over two
 # minutes on `waitingOn: "vision_analyze"` with nothing recorded, invisible to the check above.
 # Its own limit, because a slow render and a slow answer are different events.
-TOOL_STALL_ENV = "XYCY_HZ_TOOLSTALL_SEC"
+TOOL_STALL_ENV = "XYSY_HZ_TOOLSTALL_SEC"
 TOOL_STALL_DEFAULT = 600
 
 
@@ -2640,7 +2640,7 @@ def _tool_stall_limit():
 # result after writing its verdict (XY-LOOKED asks it to) and cutting that off would destroy the
 # picture. The run ends when the verdict is terminal AND nothing has touched the application for
 # STEP_DONE_GRACE seconds.
-STEP_DONE_GRACE = float(os.environ.get("XYCY_STEP_DONE_GRACE", "25") or 25)
+STEP_DONE_GRACE = float(os.environ.get("XYSY_STEP_DONE_GRACE", "25") or 25)
 
 
 def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=None):
@@ -2676,11 +2676,11 @@ def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=No
             if done and verdict_at and (time.time() - verdict_at) >= STEP_DONE_GRACE:
                 try:
                     with open(log_path, "a") as handle:
-                        handle.write("\n[xycy] XY-STEPDONE - the step wrote a terminal verdict "
+                        handle.write("\n[xysy] XY-STEPDONE - the step wrote a terminal verdict "
                                      "and has not touched its application for %d s. Ending the "
                                      "session; the verdict stands.\n" % int(STEP_DONE_GRACE))
                 except Exception as _xy_e:
-                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2683')
+                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2683')
                 try:
                     child.terminate()
                     try:
@@ -2689,7 +2689,7 @@ def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=No
                         child.kill()
                         child.wait(timeout=20)
                 except Exception as _xy_e:
-                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2692')
+                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2692')
                 code = child.returncode
                 return (code if code is not None else 0, False)
         # XY-HZSTALL2 - watch whatever it is waiting ON, not only the model. An empty waitingOn
@@ -2701,7 +2701,7 @@ def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=No
         if not limit:
             continue
         # XY-STALLBLIND. `waitingSec` comes out of hermes-status.json, and the watchdog was
-        # treating that file as a clock. It is not one. The xycy_progress plugin refreshes it on
+        # treating that file as a clock. It is not one. The xysy_progress plugin refreshes it on
         # every event and otherwise on a three-second heartbeat thread - and the heartbeat is
         # inside the very process that is wedged, so the moment the process stops behaving, the
         # number stops moving and the watchdog reads the last one written for ever.
@@ -2739,12 +2739,12 @@ def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=No
             continue
         try:
             with open(log_path, "a") as handle:
-                handle.write("\n[xycy] XY-HZSTALL - no answer from %s for %d s "
+                handle.write("\n[xysy] XY-HZSTALL - no answer from %s for %d s "
                              "(limit %d s); ending this attempt so the run can resume\n"
                              % ("the model" if waiting_on == "model" else "tool " + waiting_on,
                                 int(waited), limit))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2747')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2747')
         try:
             child.terminate()
             try:
@@ -2753,7 +2753,7 @@ def _wait_watching_for_stall(child, status_path, stop_path, log_path, run_dir=No
                 child.kill()
                 child.wait(timeout=20)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2756')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2756')
         code = child.returncode
         return (code if code is not None else -1, True)
 
@@ -2891,7 +2891,7 @@ def _enforce_done_needs_a_call(run_dir, servers, log_path):
                 json.dump(data, handle, indent=1)
             changed.append(name)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2894')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2894')
     # XY-DONEZEROBASE - and the same for the BASE progress.json, which is the only place a
     # whole-workflow run ever writes a verdict.
     #
@@ -2945,15 +2945,15 @@ def _enforce_done_needs_a_call(run_dir, servers, log_path):
                     json.dump(base, handle, indent=1)
                 changed.append("progress.json(" + ", ".join(hit) + ")")
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:donezerobase')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:donezerobase')
     if changed:
         try:
             with open(log_path, "a") as handle:
-                handle.write("\n[xycy] XY-DONEZERO - %s said done with 0 application calls; "
+                handle.write("\n[xysy] XY-DONEZERO - %s said done with 0 application calls; "
                              "rewritten as blocked, the claim kept in `claimed`.\n"
                              % ", ".join(changed))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:2956')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:2956')
     return changed
 
 
@@ -3039,7 +3039,7 @@ def _supervise(spec_path):
     status_path = os.path.join(run_dir, "hermes-status.json")
     stop_path = os.path.join(run_dir, "STOP")
     # XY-HZWALL - nothing recorded the RUN's own start, so nothing could report its wall clock.
-    # hermes-status.json carries startedAt/elapsedSec from the xycy_progress plugin, and the plugin
+    # hermes-status.json carries startedAt/elapsedSec from the xysy_progress plugin, and the plugin
     # sets _STARTED_AT at import - once per Hermes PROCESS. Every retry spawns a new child, so the
     # clock resets: measured 25 Aug, a run 27 minutes old reported 3.1 minutes the moment it went
     # to attempt 3, and the Player shows that number. hermes-attempts.json only records each
@@ -3056,7 +3056,7 @@ def _supervise(spec_path):
                            "wallClockSec": round(time.time() - run_started_at, 1),
                            "attempts": attempts}, h, indent=2)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3059')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3059')
     _write_attempts()
 
     for i in range(tries):
@@ -3079,7 +3079,7 @@ def _supervise(spec_path):
             if log not in (subprocess.DEVNULL,):
                 log.close()
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3082')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3082')
 
         st = load_json(status_path) or {}
         tools = int(((st.get("counts") or {}).get("tool_calls")) or 0)
@@ -3112,7 +3112,7 @@ def _supervise(spec_path):
             break
 
         # Keep the run readable as still-going across the gap: the plugin sets finishedAt at
-        # session_end, and XYCY reads alive as "process there AND not finished". Without this
+        # session_end, and XYSY reads alive as "process there AND not finished". Without this
         # the one second between attempts looks like a death.
         try:
             st["finishedAt"] = None
@@ -3120,7 +3120,7 @@ def _supervise(spec_path):
             with open(status_path, "w", encoding="utf-8") as handle:
                 json.dump(st, handle, indent=2)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3123')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3123')
         # XY-RESUMEBLIND - do not send a model to continue a plan that is not there. A
         # per-step run has no RUN.md and no progress.json (it writes progress-<node>.json),
         # so the retry used to open two missing files and then decide for itself what the
@@ -3137,31 +3137,31 @@ def _supervise(spec_path):
         if _sr:
             try:
                 with open(log_path, "a") as handle:
-                    handle.write("\n[xycy] XY-STEPRESUME - the session ended with this step "
+                    handle.write("\n[xysy] XY-STEPRESUME - the session ended with this step "
                                  "unfinished; continuing from %s (attempt %d of %d)\n"
                                  % (_sr["spec"], i + 2, tries))
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3144')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3144')
             argv = list(argv)
             argv[2] = STEP_RESUME_PROMPT % _sr
             continue
         if not (_readable(run_md_path) or _readable(progress_for_resume)):
             try:
                 with open(log_path, "a") as handle:
-                    handle.write("\n[xycy] XY-RESUMEBLIND - neither RUN.md nor progress.json "
+                    handle.write("\n[xysy] XY-RESUMEBLIND - neither RUN.md nor progress.json "
                                  "is readable in this run directory, so there is no plan to "
                                  "resume from. Not starting another attempt; whatever the "
                                  "model reported stands.\n")
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3156')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3156')
             break
         try:
             with open(log_path, "a") as handle:
-                handle.write("\n[xycy] the session ended with the run unfinished — "
+                handle.write("\n[xysy] the session ended with the run unfinished — "
                              "continuing from progress.json (attempt %d of %d)\n"
                              % (i + 2, tries))
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3164')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3164')
         argv = list(argv)
         argv[2] = RESUME_PROMPT % {
             "run_md": run_md_path,
@@ -3188,7 +3188,7 @@ def _supervise(spec_path):
             with open(progress_path, "w", encoding="utf-8") as handle:
                 json.dump(pr, handle, indent=2)
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_hermes_run.py:3191')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_hermes_run.py:3191')
 
 
 def main():
@@ -3197,21 +3197,21 @@ def main():
     if _spec:
         _supervise(_spec)
         return
-    parser = argparse.ArgumentParser(description="Run a XYCY workflow on the Hermes harness")
+    parser = argparse.ArgumentParser(description="Run a XYSY workflow on the Hermes harness")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
     def shared(sub):
-        sub.add_argument("--dir", required=True, help="XYCY project folder")
+        sub.add_argument("--dir", required=True, help="XYSY project folder")
         sub.add_argument("--run-id", required=True, dest="run_id")
 
     start = subparsers.add_parser("start")
     shared(start)
     start.add_argument("--prompt")
     start.add_argument("--prompt-file", dest="prompt_file")
-    start.add_argument("--model", default=os.environ.get("XYCY_HERMES_MODEL"))
-    start.add_argument("--provider", default=os.environ.get("XYCY_HERMES_PROVIDER"))
+    start.add_argument("--model", default=os.environ.get("XYSY_HERMES_MODEL"))
+    start.add_argument("--provider", default=os.environ.get("XYSY_HERMES_PROVIDER"))
     start.add_argument("--base-url", dest="base_url",
-                       default=os.environ.get("XYCY_HERMES_BASE_URL"))
+                       default=os.environ.get("XYSY_HERMES_BASE_URL"))
     # XY-FULLCONTEXT - the default is None, not the floor. It WAS the floor, which meant
     # args.context_length was always filled and always won, so resolve_context never reached
     # the model's own window and the fix did nothing at all. MEASURED on the first run after
@@ -3219,8 +3219,8 @@ def main():
     # for", on a machine whose config had just been raised to 262,144. A default that cannot
     # be told apart from a choice is not a default.
     start.add_argument("--context-length", dest="context_length", type=int,
-                       default=(int(os.environ["XYCY_HERMES_CONTEXT"])
-                                if os.environ.get("XYCY_HERMES_CONTEXT") else None))
+                       default=(int(os.environ["XYSY_HERMES_CONTEXT"])
+                                if os.environ.get("XYSY_HERMES_CONTEXT") else None))
     start.add_argument("--max-tool-calls", dest="max_tool_calls", type=int,
                        default=DEFAULT_MAX_TOOL_CALLS)
     start.add_argument("--servers", help="comma-separated registry server ids (default: all app servers)")

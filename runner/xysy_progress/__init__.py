@@ -1,14 +1,14 @@
-"""xycy_progress — XYCY run instrumentation for the Hermes Agent harness.
+"""xysy_progress — XYSY run instrumentation for the Hermes Agent harness.
 
 WHY THIS EXISTS
 ---------------
-XYCY's Run Theater renders from two things a run produces on disk:
+XYSY's Run Theater renders from two things a run produces on disk:
 
   runs/<runId>/progress.json   the step ledger the MODEL writes (status per step)
   a live event feed            what the harness is doing right now
 
 On Claude Code the second one came free: `claude -p --output-format stream-json`
-emits a line per tool call and `cliEventLine()` in xycy.html parses it. Hermes's
+emits a line per tool call and `cliEventLine()` in xysy.html parses it. Hermes's
 `-z/--oneshot` deliberately prints ONLY the final response text, so there is
 nothing to tail. This plugin supplies the missing feed from Hermes's OWN
 observer-hook contract (`hermes.observer.v1`) instead of by scraping stdout —
@@ -17,15 +17,15 @@ which is strictly better: the payloads carry real correlation IDs
 
 CONTRACT
 --------
-Activated only when XYCY_RUN_DIR points at a run directory. Writes:
+Activated only when XYSY_RUN_DIR points at a run directory. Writes:
 
-  <XYCY_RUN_DIR>/hermes-events.ndjson   one JSON object per line, append-only
-  <XYCY_RUN_DIR>/hermes-status.json     rewritten snapshot: liveness + counters
+  <XYSY_RUN_DIR>/hermes-events.ndjson   one JSON object per line, append-only
+  <XYSY_RUN_DIR>/hermes-status.json     rewritten snapshot: liveness + counters
 
 It NEVER writes progress.json. That file is the model's honest ledger, and the
-XYCY honesty rules forbid anything else marking a step "done" — a plugin that
+XYSY honesty rules forbid anything else marking a step "done" — a plugin that
 "helpfully" closed out steps would fake exactly the outcome those rules exist to
-prevent. The status snapshot is how XYCY can still show life when the model has
+prevent. The status snapshot is how XYSY can still show life when the model has
 gone quiet, and how it can tell "still working" from "died".
 
 Every callback is fail-open and self-silencing: Hermes catches exceptions and
@@ -65,7 +65,7 @@ def say_something(err, where):
         if n > 3:
             return
         tail = " (further reports from this line are dropped)" if n == 3 else ""
-        _xy_sys.stderr.write("[xycy] " + str(where) + ": " + type(err).__name__
+        _xy_sys.stderr.write("[xysy] " + str(where) + ": " + type(err).__name__
                              + ": " + str(err) + tail + "\n")
         _xy_sys.stderr.flush()
     except Exception:
@@ -73,7 +73,7 @@ def say_something(err, where):
 # --- end XY-SAYPY -----------------------------------------------------------
 
 
-SCHEMA = "xycy.hermes.events.v1"
+SCHEMA = "xysy.hermes.events.v1"
 
 _LOCK = threading.Lock()
 _DEAD = False           # set True after a write failure; stops all further work
@@ -84,7 +84,7 @@ _STATUS_PATH = None
 # XY-SHOTCOPY -----------------------------------------------------------------
 # Where this run's viewport captures should land, and how to recognise one. An app's
 # capture tool answers with a path into the harness cache (rhinomcp returns
-# "MEDIA:~/.xycy/hermes-runs/<run>/cache/images/img_*.png"); the step was then asked to
+# "MEDIA:~/.xysy/hermes-runs/<run>/cache/images/img_*.png"); the step was then asked to
 # copy that file itself and could not, because its only writing tool writes text.
 _SHOT_PATH = None
 _SHOT_N = 0
@@ -192,12 +192,12 @@ _FINISHED_AT = None
 # session of its own mid-run, and only the root session ending means the run is over.
 _ROOT_SESSION = None
 _BEAT = None
-_BEAT_SECONDS = float(os.environ.get("XYCY_HEARTBEAT_SECONDS", "3") or 3)
+_BEAT_SECONDS = float(os.environ.get("XYSY_HEARTBEAT_SECONDS", "3") or 3)
 
 # Tool args/results can be enormous (a whole RhinoScript body, a base64 PNG from
 # capture_viewport). The console only ever shows a one-line preview, so truncate
 # at the source rather than writing megabytes per step to disk.
-_PREVIEW_CHARS = int(os.environ.get("XYCY_EVENT_PREVIEW_CHARS", "400") or 400)
+_PREVIEW_CHARS = int(os.environ.get("XYSY_EVENT_PREVIEW_CHARS", "400") or 400)
 
 
 def _preview(value):
@@ -218,11 +218,11 @@ def _preview(value):
 
 
 def _init():
-    """Resolve the run directory. Returns False when XYCY isn't driving this run."""
+    """Resolve the run directory. Returns False when XYSY isn't driving this run."""
     global _RUN_DIR, _EVENTS_PATH, _STATUS_PATH
     if _RUN_DIR is not None:
         return True
-    run_dir = os.environ.get("XYCY_RUN_DIR", "").strip()
+    run_dir = os.environ.get("XYSY_RUN_DIR", "").strip()
     if not run_dir:
         return False
     run_dir = os.path.abspath(os.path.expanduser(run_dir))
@@ -233,7 +233,7 @@ def _init():
     _RUN_DIR = run_dir
     _EVENTS_PATH = os.path.join(run_dir, "hermes-events.ndjson")
     global _SHOT_PATH
-    shot = os.environ.get("XYCY_SHOT_PATH", "").strip()
+    shot = os.environ.get("XYSY_SHOT_PATH", "").strip()
     if shot:
         _SHOT_PATH = os.path.abspath(os.path.expanduser(shot))
         try:
@@ -252,7 +252,7 @@ def _beat():
     XY-BEATLIVES: this used to `return` on the first exception, which ended the
     heartbeat for the rest of the run. On Windows that is not a hypothetical: the
     snapshot is published with os.replace(), and os.replace onto a file another
-    process currently has open raises PermissionError. XYCY's run poller reads
+    process currently has open raises PermissionError. XYSY's run poller reads
     hermes-status.json every couple of seconds, so a collision is a matter of time.
     MEASURED on Sean's PC, 21 Sep 2026, run_1790010071400__n115: the file stopped at
     11:22:38 with a hermes-status.json.tmp left beside it, and the page showed the
@@ -275,10 +275,10 @@ def _start_beat():
     if _BEAT is not None or _BEAT_SECONDS <= 0:
         return
     try:
-        _BEAT = threading.Thread(target=_beat, name="xycy-heartbeat", daemon=True)
+        _BEAT = threading.Thread(target=_beat, name="xysy-heartbeat", daemon=True)
         _BEAT.start()
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:281')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:281')
 
 def _emit(kind, **fields):
     """Append one event and refresh the status snapshot. Never raises."""
@@ -300,7 +300,7 @@ def _emit(kind, **fields):
             # XY-BEATLIVES: the snapshot is a CONVENIENCE and the event log is the
             # record. Publishing the snapshot can fail on its own for a reason that
             # says nothing about the log - on Windows, os.replace refuses while
-            # XYCY's poller holds the destination open. That used to set _DEAD and
+            # XYSY's poller holds the destination open. That used to set _DEAD and
             # silence the event log too, so one lost snapshot cost the rest of the
             # run: no events, no heartbeat, and a page that read NOT RESPONDING
             # while the model went on working. Measured on run_1790010071400__n115,
@@ -308,7 +308,7 @@ def _emit(kind, **fields):
             try:
                 _write_status()
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:snapshot')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:snapshot')
     except Exception:
         # One bad write (full disk, deleted run dir) means every subsequent one
         # fails too. Go quiet instead of logging a warning per tool call.
@@ -316,10 +316,10 @@ def _emit(kind, **fields):
 
 
 def _write_status():
-    """Rewrite the snapshot atomically — XYCY may poll it mid-write."""
+    """Rewrite the snapshot atomically — XYSY may poll it mid-write."""
     snapshot = {
         "schema": SCHEMA,
-        "runId": os.environ.get("XYCY_RUN_ID") or None,
+        "runId": os.environ.get("XYSY_RUN_ID") or None,
         "harness": "hermes",
         "model": os.environ.get("HERMES_INFERENCE_MODEL") or None,
         "pid": os.getpid(),
@@ -340,7 +340,7 @@ def _write_status():
     with open(tmp, "w", encoding="utf-8") as handle:
         json.dump(snapshot, handle, indent=2, default=str)
     # XY-BEATLIVES: os.replace is atomic on POSIX and refuses on Windows while a
-    # reader holds the destination open. The reader is XYCY's own poller and it lets
+    # reader holds the destination open. The reader is XYSY's own poller and it lets
     # go in milliseconds, so retry briefly before giving up on THIS beat.
     last = None
     for attempt in range(6):
@@ -354,7 +354,7 @@ def _write_status():
 
 
 # --- XY-HOUSEGRAPH6 - the Hermes lane learns too ------------------------------------------
-# The XYCY engine writes ~/.xycy/house-graph.json as tools refuse it (xycy-engine/house.mjs):
+# The XYSY engine writes ~/.xysy/house-graph.json as tools refuse it (xysy-engine/house.mjs):
 # "Prerequisites failed: ...", "'X' object has no attribute 'Y'", and the rest. Until this was
 # added only that lane learned; a step run through Hermes met the same refusals and wrote
 # nothing down, so the next Hermes step rediscovered them. This is a port of REFUSAL_PATTERNS
@@ -364,8 +364,8 @@ def _write_status():
 #
 # Hermes names an MCP tool mcp__<server>__<tool>; the engine names it <server>__<tool>. The
 # leading mcp__ is dropped so the same refusal from the same tool is one fact, not two.
-_HOUSE_PATH = os.path.join(os.path.expanduser("~"), ".xycy", "house-graph.json")
-_HOUSE_SCHEMA = "xycy.house.v1"
+_HOUSE_PATH = os.path.join(os.path.expanduser("~"), ".xysy", "house-graph.json")
+_HOUSE_SCHEMA = "xysy.house.v1"
 _HOUSE_PATTERNS = (
     ("requires", re.compile(r'Prerequisites failed:\s*([^\n"\\]+?)\.?\s*(?:\\n|\n|"|$)', re.I), None),
     ("requires", re.compile(r'validation error for \w+\s*\n\s*(\w+)\s*\n\s*Field required', re.I),
@@ -435,7 +435,7 @@ def house_record_fact(fact, path=None):
     except Exception:
         g = None
     if g is None:
-        g = {"schema": _HOUSE_SCHEMA, "name": "What XYCY has learned on this computer", "nodes": [], "edges": []}
+        g = {"schema": _HOUSE_SCHEMA, "name": "What XYSY has learned on this computer", "nodes": [], "edges": []}
     g["nodes"] = g.get("nodes") if isinstance(g.get("nodes"), list) else []
     g["edges"] = g.get("edges") if isinstance(g.get("edges"), list) else []
     key = _house_norm(fact["from"]) + "|" + _house_norm(fact.get("rel")) + "|" + _house_norm(fact["to"])
@@ -463,7 +463,7 @@ def house_record_fact(fact, path=None):
         os.replace(tmp, path)
     except Exception as _xy_e:
         # XY-HOUSEGRAPH6B - a fact that could not be written is said, not swallowed
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:housewrite')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:housewrite')
         return None
     return edge
 
@@ -478,7 +478,7 @@ def _house_learn(tool, result, error):
             text += (v if isinstance(v, str) else json.dumps(v, default=str)) + "\n"
         if not text or ("mcp" not in str(tool or "") and "__" not in str(tool or "")):
             return None   # only what an application's own tool said; a file reader's error names a path, not a fact
-        ctx = {"os": sys.platform, "run": os.path.basename(_RUN_DIR or ""), "model": os.environ.get("XYCY_MODEL", "")}
+        ctx = {"os": sys.platform, "run": os.path.basename(_RUN_DIR or ""), "model": os.environ.get("XYSY_MODEL", "")}
         fact = house_refusal_fact(tool, text[:8000], ctx)
         if not fact:
             return None
@@ -487,7 +487,7 @@ def _house_learn(tool, result, error):
             _emit("learned", tool=fact["from"], rel=fact["rel"], fact=fact["to"], seen=edge.get("seen"))
         return edge
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:houselearn')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:houselearn')
         return None
 
 
@@ -508,7 +508,7 @@ def on_session_start(**kwargs):
 
 def on_session_end(**kwargs):
     # XY-SUBEND: this fired for a delegated sub-agent too, and setting _FINISHED_AT
-    # both froze the snapshot at "finished" and killed the heartbeat thread. XYCY read
+    # both froze the snapshot at "finished" and killed the heartbeat thread. XYSY read
     # that as the session ending, took its verdict from a progress.json that still said
     # "running" with nothing done, and told the person the run FAILED - while the parent
     # session went on working for another 74 seconds. Measured on run_1786864518322,
@@ -568,7 +568,7 @@ def pre_tool_call(**kwargs):
     try:
         _note_shot_target(kwargs.get("args"))
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:571')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:571')
     _WAITING["on"], _WAITING["since"] = (kwargs.get("tool_name") or "a tool"), time.time()
     _COUNTS["tool_calls"] += 1
     call_id = kwargs.get("tool_call_id")
@@ -579,7 +579,7 @@ def pre_tool_call(**kwargs):
             if kwargs.get("tool_name") == "tool_call" and isinstance(kwargs.get("args"), dict):
                 _HOUSE_INNER[call_id] = str(kwargs["args"].get("name") or kwargs["args"].get("tool") or "")
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:houseinner')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:houseinner')
     _emit("tool_start",
           session_id=kwargs.get("session_id"),
           turn_id=kwargs.get("turn_id"),
@@ -587,7 +587,7 @@ def pre_tool_call(**kwargs):
           tool=kwargs.get("tool_name"),
           args=_preview(kwargs.get("args")))
     # Returning None leaves the call alone. This hook CAN block a tool
-    # ({"action": "block"}) — deliberately unused: XYCY runs with --yolo and
+    # ({"action": "block"}) — deliberately unused: XYSY runs with --yolo and
     # policy belongs in the launcher's server allowlist, not in telemetry.
     return None
 
@@ -623,7 +623,7 @@ def post_tool_call(**kwargs):
     try:
         _house_learn(_HOUSE_INNER.pop(call_id, None) or kwargs.get("tool_name"), kwargs.get("result"), kwargs.get("error"))
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_progress/__init__.py:houselearn2')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_progress/__init__.py:houselearn2')
     _emit("tool_end",
           session_id=kwargs.get("session_id"),
           turn_id=kwargs.get("turn_id"),
@@ -701,7 +701,7 @@ def subagent_stop(**kwargs):
 def register(ctx):
     """Hermes plugin entry point."""
     if not _init():
-        return          # not an XYCY run — stay completely inert
+        return          # not an XYSY run — stay completely inert
     ctx.register_hook("on_session_start", on_session_start)
     ctx.register_hook("on_session_end", on_session_end)
     ctx.register_hook("on_session_finalize", on_session_finalize)
@@ -712,10 +712,10 @@ def register(ctx):
     ctx.register_hook("post_tool_call", post_tool_call)
     ctx.register_hook("subagent_start", subagent_start)
     ctx.register_hook("subagent_stop", subagent_stop)
-    _emit("plugin_loaded", plugin="xycy_progress", version="0.1.0")
+    _emit("plugin_loaded", plugin="xysy_progress", version="0.1.0")
     # XY-RHINOLEAK: something the PERSON needs to read, not the model. The launcher measures
     # it before the run starts and hands it over here, because the event feed is the only
     # channel that reaches the run console.
-    _notice = os.environ.get("XYCY_NOTICE", "").strip()
+    _notice = os.environ.get("XYSY_NOTICE", "").strip()
     if _notice:
         _emit("notice", text=_notice)

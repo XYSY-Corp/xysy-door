@@ -47,7 +47,7 @@ PATH_KEYS = ("path", "file_path", "filename", "file", "target", "resolved_path",
 # --accept-source-agreements --force` from its terminal. The 375 MB installer had downloaded and
 # the install had started when the run was stopped by hand. Installing software, and accepting its
 # licence, is the person's decision, never a step's. Python libraries are not covered here: the
-# document steps' own interpreter is provisioned by XYCY (XY-DOCLIBS2).
+# document steps' own interpreter is provisioned by XYSY (XY-DOCLIBS2).
 COMMAND_TOOLS = ("terminal", "execute_code", "shell", "bash", "run_command", "powershell", "process")
 INSTALL_RE = re.compile(
     r"\b(?:winget|choco|chocolatey|scoop)(?:\.exe)?\s+(?:install|upgrade|add)\b"
@@ -77,9 +77,9 @@ def norm(p):
     """An absolute, resolved, comparable path - or None when there was no path.
 
     The empty string is None, not the current directory. os.path.abspath("") answers the
-    process's cwd, so without this an UNSET XYCY_RUN_DIR would quietly become "wherever the
+    process's cwd, so without this an UNSET XYSY_RUN_DIR would quietly become "wherever the
     model happens to be", and the guard would enforce against a root nobody chose. Caught by
-    its own test on 19 Sep: with no XYCY variables at all it refused a write it should have
+    its own test on 19 Sep: with no XYSY variables at all it refused a write it should have
     stood aside for.
     """
     text = str(p or "").strip()
@@ -142,8 +142,8 @@ def main():
     if str(payload.get("hook_event_name") or "") not in ("pre_tool_call", ""):
         return 0
     tool = str(payload.get("tool_name") or "")
-    # XY-NOINSTALL - only inside an XYCY run, like every rule here.
-    if str(os.environ.get("XYCY_RUN_DIR") or "") or str(os.environ.get("XYCY_OUTPUTS_DIR") or ""):
+    # XY-NOINSTALL - only inside an XYSY run, like every rule here.
+    if str(os.environ.get("XYSY_RUN_DIR") or "") or str(os.environ.get("XYSY_OUTPUTS_DIR") or ""):
         inst = install_command(tool, payload.get("tool_input") or {})
         if inst:
             sys.stderr.write(
@@ -158,12 +158,12 @@ def main():
     if not raw:
         return 0                                    # a write whose path we cannot see: allowed
 
-    run_said = str(os.environ.get("XYCY_RUN_DIR") or "")      # as the caller wrote it
-    out_said = str(os.environ.get("XYCY_OUTPUTS_DIR") or "")   # XY-SAYWHERE quotes these back
+    run_said = str(os.environ.get("XYSY_RUN_DIR") or "")      # as the caller wrote it
+    out_said = str(os.environ.get("XYSY_OUTPUTS_DIR") or "")   # XY-SAYWHERE quotes these back
     run_dir = norm(run_said)
     out_dir = norm(out_said)
     if not run_dir and not out_dir:
-        return 0                                    # not an XYCY run: this guard does not apply
+        return 0                                    # not an XYSY run: this guard does not apply
 
     # XY-WRITEGUARD3 - a RELATIVE path is refused, because this guard cannot know where it
     # will land and MEASURED 20 Sep 2026 it lands somewhere nobody chose.
@@ -214,14 +214,14 @@ def main():
         return 2
 
     if os.path.splitext(target)[1].lower() in CODE_SUFFIXES and \
-            str(os.environ.get("XYCY_SCRIPT_STEP") or "") != "1":
+            str(os.environ.get("XYSY_SCRIPT_STEP") or "") != "1":
         # XY-GUARDSAYSPY2 (28 Sep 2026) - the same rule, and the right thing to do instead for THIS
         # step. MEASURED on Sean's PC, Hermes on the retaining wall and steel beam calculation steps:
         # a step that drives no application was told to "drive the application through its own
         # tools" - it has none - and spent several local-model turns finding another way to run the
-        # same program. Such a step has execute_code (XY-DOCSTEPPY); the XYCY engine's guard already
+        # same program. Such a step has execute_code (XY-DOCSTEPPY); the XYSY engine's guard already
         # names its equivalent, xy_run_python.
-        if str(os.environ.get("XYCY_DOC_STEP") or "") == "1":
+        if str(os.environ.get("XYSY_DOC_STEP") or "") == "1":
             sys.stderr.write(
                 "XY-WRITEGUARD: program files are not written with a file tool in this run - %s "
                 "refused. Pass the program text straight to execute_code instead: it runs it, and "

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""xycy_setup — the no-terminal install actions behind the Hermes setup screen.
+"""xysy_setup — the no-terminal install actions behind the Hermes setup screen.
 
 Every empty state on that screen is a button, and each button has to do real work that takes
-minutes. So all three run as BACKGROUND JOBS with a progress file XYCY polls, exactly the shape
+minutes. So all three run as BACKGROUND JOBS with a progress file XYSY polls, exactly the shape
 the run path already uses — rather than a synchronous call that makes the UI look hung.
 
-    xycy_setup.py install-hermes                 -> {jobId}
-    xycy_setup.py install-ollama                 -> {jobId}
-    xycy_setup.py pull-model --model llama3.1:8b -> {jobId}
-    xycy_setup.py job --id <jobId>               -> the progress snapshot
-    xycy_setup.py job --list
+    xysy_setup.py install-hermes                 -> {jobId}
+    xysy_setup.py install-ollama                 -> {jobId}
+    xysy_setup.py pull-model --model llama3.1:8b -> {jobId}
+    xysy_setup.py job --id <jobId>               -> the progress snapshot
+    xysy_setup.py job --list
 
 Three rules learned the hard way elsewhere in this codebase, applied here:
 
@@ -59,7 +59,7 @@ def say_something(err, where):
         if n > 3:
             return
         tail = " (further reports from this line are dropped)" if n == 3 else ""
-        _xy_sys.stderr.write("[xycy] " + str(where) + ": " + type(err).__name__
+        _xy_sys.stderr.write("[xysy] " + str(where) + ": " + type(err).__name__
                              + ": " + str(err) + tail + "\n")
         _xy_sys.stderr.flush()
     except Exception:
@@ -68,9 +68,9 @@ def say_something(err, where):
 
 
 HOME = os.path.expanduser("~")
-XYCY_ROOT = os.environ.get("XYCY_ROOT") or os.path.join(HOME, ".xycy")
-JOBS_DIR = os.path.join(XYCY_ROOT, "jobs")
-OLLAMA_URL = os.environ.get("XYCY_OLLAMA_URL", "http://127.0.0.1:11434")
+XYSY_ROOT = os.environ.get("XYSY_ROOT") or os.path.join(HOME, ".xysy")
+JOBS_DIR = os.path.join(XYSY_ROOT, "jobs")
+OLLAMA_URL = os.environ.get("XYSY_OLLAMA_URL", "http://127.0.0.1:11434")
 HERMES_INSTALLER = ("https://raw.githubusercontent.com/NousResearch/"
                     "hermes-agent/main/scripts/install.sh")
 OLLAMA_DMG_ZIP = "https://ollama.com/download/Ollama-darwin.zip"
@@ -86,7 +86,7 @@ def lock_path(kind):
 
 
 def write_job(job_id, **fields):
-    """Atomic, because XYCY polls this file while we are writing it."""
+    """Atomic, because XYSY polls this file while we are writing it."""
     os.makedirs(JOBS_DIR, exist_ok=True)
     path = job_path(job_id)
     try:
@@ -108,7 +108,7 @@ def pid_alive(pid):
     # XY-KILLNOTASK - os.kill(pid, 0) is the POSIX "are you there" idiom. On Windows CPython
     # implements os.kill as TerminateProcess for every signal but the two console ones, and
     # whether zero is excluded depends on the Python version. See the note beside pid_is_alive
-    # in xycy_hermes_run.py, including the measurement showing this Python does NOT kill.
+    # in xysy_hermes_run.py, including the measurement showing this Python does NOT kill.
     try:
         pid = int(pid)
     except Exception:
@@ -145,7 +145,7 @@ def claim(kind):
             return held.get("jobId")
         # A stale lock from a crashed or killed job must not block forever.
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_setup.py:148')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_setup.py:148')
     return None
 
 
@@ -158,7 +158,7 @@ def drop_lock(kind):
     try:
         os.unlink(lock_path(kind))
     except Exception as _xy_e:
-        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_setup.py:161')
+        say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_setup.py:161')
 
 
 def spawn_worker(kind, argv_extra):
@@ -447,11 +447,11 @@ def work_install_hermes(job_id, args):
             try:
                 tail = open(log, "r", errors="replace").read()[-600:]
             except Exception as _xy_e:
-                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_setup.py:450')
+                say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_setup.py:450')
             write_job(job_id, state="failed", ok=False, phase="install failed",
                       error="Hermes did not appear after the pip install. Native Windows support "
                             "is experimental upstream — installing under WSL2 is the supported "
-                            "route, and XYCY will find it there.", detail=tail)
+                            "route, and XYSY will find it there.", detail=tail)
             return
         try:
             version = subprocess.run([binary, "--version"], capture_output=True, text=True,
@@ -508,7 +508,7 @@ def work_install_hermes(job_id, args):
         try:
             tail = open(log, "r", errors="replace").read()[-600:]
         except Exception as _xy_e:
-            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_setup.py:511')
+            say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_setup.py:511')
         write_job(job_id, state="failed", ok=False, phase="install failed",
                   error="Hermes did not appear after the installer ran", detail=tail)
         return
@@ -580,7 +580,7 @@ OLLAMA_SERVE_ENV = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0
 #
 # So: work out what this computer can afford, ask for that, and never ask for less than the
 # 65,536 the August measurement established as the minimum a workflow needs. 262,144 is the
-# cap because it is the trained window of every model XYCY currently qualifies.
+# cap because it is the trained window of every model XYSY currently qualifies.
 CTX_FLOOR = 65536
 CTX_CAP = 262144
 
@@ -638,7 +638,7 @@ def ollama_parallel():
     with `llama-server GPU discovery watchdog timed out ... context deadline exceeded` followed
     by `[GIN] 500 | 30.0029603s | POST "/v1/chat/completions"` - a request that waited the full
     thirty-second discovery timeout and then failed. A Hermes step delegates by design, so this
-    is the normal case for XYCY, not an edge one. Slots on the existing runner cost key-value
+    is the normal case for XYSY, not an edge one. Slots on the existing runner cost key-value
     cache and nothing else; a second runner costs another copy of the model and usually cannot
     be had at all.
     """
@@ -676,9 +676,9 @@ def _server_cwd(binary):
     """XY-OLLAMACWD (25 Sep 2026) - the folder a long-lived server is started in.
 
     A server started by this script inherits this script's folder as its working folder, and
-    this script lives inside the installed XYCY agent. MEASURED on Sean's PC: the `ollama serve`
+    this script lives inside the installed XYSY agent. MEASURED on Sean's PC: the `ollama serve`
     started by XY-OLLAMASERVE kept running after the Bridge that started it had exited, and held
-    the installed XYCY folder open, so the next install of XYCY failed with "Permission
+    the installed XYSY folder open, so the next install of XYSY failed with "Permission
     denied" on its own folder. The server is started in Ollama's own folder instead (the home
     folder when that is unknown), which nothing ever needs to replace.
     """
@@ -687,7 +687,7 @@ def _server_cwd(binary):
         if d and os.path.isdir(d):
             return d
     except Exception as exc:  # noqa: BLE001 - said, then the home folder is used
-        sys.stderr.write("xycy_setup: could not use Ollama's folder as the working folder: %s\n" % exc)
+        sys.stderr.write("xysy_setup: could not use Ollama's folder as the working folder: %s\n" % exc)
     return os.path.expanduser("~")
 
 
@@ -743,7 +743,7 @@ def work_install_ollama(job_id, args):
             write_job(job_id, state="failed", ok=False, phase="window too small",
                       window=window,
                       error="Ollama is running, but it is only giving models a %s-token "
-                            "window and XYCY needs %s. Steps will die part-way through "
+                            "window and XYSY needs %s. Steps will die part-way through "
                             "with no result. Set OLLAMA_CONTEXT_LENGTH=%s in Ollama's "
                             "environment and restart it."
                             % (window, 65536, 65536))
@@ -784,7 +784,7 @@ def work_install_ollama(job_id, args):
                     write_job(job_id, state="failed", ok=False, phase="window too small",
                               path=here, window=window,
                               error="Ollama is running now, but it is only giving models a %s-"
-                                    "token window and XYCY needs %s. Steps will die part-way "
+                                    "token window and XYSY needs %s. Steps will die part-way "
                                     "through with no result. Set OLLAMA_CONTEXT_LENGTH=%s in "
                                     "Ollama's environment and restart it."
                                     % (window, 65536, 65536))
@@ -808,7 +808,7 @@ def work_install_ollama(job_id, args):
                                      env=_env, cwd=_server_cwd(here), creationflags=0x00000008 | 0x00000200)
                     write_job(job_id, state="running", percent=40, phase="starting Ollama",
                               path=here, message="Ollama's own app did not start its server, so "
-                                                 "XYCY is starting the server directly")
+                                                 "XYSY is starting the server directly")
                 except Exception as exc:  # noqa: BLE001 - reported, then the wait goes on
                     write_job(job_id, state="running", percent=40, phase="starting Ollama",
                               path=here, message="starting the server directly failed too: %s" % exc)
@@ -818,7 +818,7 @@ def work_install_ollama(job_id, args):
                         % (here, OLLAMA_URL))
         return
     if os.name == "nt":
-        # Ollama ships a signed Windows installer. It is an interactive setup program, so XYCY
+        # Ollama ships a signed Windows installer. It is an interactive setup program, so XYSY
         # downloads it with a real progress bar and then LAUNCHES it — the last click is the
         # person's. Saying that plainly beats either refusing outright or pretending a silent
         # install worked; the job then waits for the endpoint, so "done" still means serving.
@@ -870,8 +870,8 @@ def work_install_ollama(job_id, args):
         return
     if sys.platform != "darwin":
         write_job(job_id, state="failed", ok=False, phase="unsupported",
-                  error="XYCY can only install Ollama automatically on macOS and Windows. "
-                        "On Linux, install it from ollama.com first — XYCY will find it.")
+                  error="XYSY can only install Ollama automatically on macOS and Windows. "
+                        "On Linux, install it from ollama.com first — XYSY will find it.")
         return
 
     binary = which_ollama()
@@ -930,7 +930,7 @@ def work_install_ollama(job_id, args):
     # normal amount of memory; without them the cache alone is several gigabytes.
     #
     # OLLAMA_CONTEXT_LENGTH is what actually ASKS for the 64k. It has to be set here, on the
-    # server, because XYCY talks to Ollama through its OpenAI-compatible endpoint and that
+    # server, because XYSY talks to Ollama through its OpenAI-compatible endpoint and that
     # endpoint ignores the per-request window - `model.ollama_num_ctx` in the Hermes profile
     # has no effect on it. Measured 2026-08-15: without this, llama-server starts at -c 32768
     # no matter what the run asks for, and a step that outgrows it does not fail cleanly. Its
@@ -1077,7 +1077,7 @@ def cmd_job(args):
                 try:
                     out.append(json.load(open(os.path.join(JOBS_DIR, name), encoding="utf-8")))
                 except Exception as _xy_e:
-                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xycy_setup.py:1080')
+                    say_something(_xy_e, 'local-agent/mcpb/server/hermes/xysy_setup.py:1080')
         print(json.dumps({"ok": True, "jobs": out}))
         return
     try:
@@ -1093,7 +1093,7 @@ def cmd_job(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="XYCY setup actions (background jobs)")
+    parser = argparse.ArgumentParser(description="XYSY setup actions (background jobs)")
     subs = parser.add_subparsers(dest="cmd", required=True)
 
     for kind in ("install-hermes", "install-ollama"):
